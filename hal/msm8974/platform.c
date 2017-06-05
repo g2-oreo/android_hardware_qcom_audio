@@ -40,9 +40,9 @@
 
 #define SOUND_TRIGGER_DEVICE_HANDSET_MONO_LOW_POWER_ACDB_ID (100)
 
-#define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
-#define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
-#define MIXER_XML_PATH_WCD9330 "/system/etc/mixer_paths_wcd9330.xml"
+#define MIXER_XML_PATH "/vendor/etc/mixer_paths.xml"
+#define MIXER_XML_PATH_AUXPCM "/vendor/etc/mixer_paths_auxpcm.xml"
+#define MIXER_XML_PATH_WCD9330 "/vendor/etc/mixer_paths_wcd9330.xml"
 #define LIB_ACDB_LOADER "libacdbloader.so"
 #define AUDIO_DATA_BLOCK_MIXER_CTL "HDMI EDID"
 
@@ -849,6 +849,52 @@ static void set_platform_defaults(struct platform_data * my_data __unused)
     backend_table[SND_DEVICE_IN_CAPTURE_FM] = strdup("capture-fm");
     backend_table[SND_DEVICE_OUT_TRANSMISSION_FM] = strdup("transmission-fm");
 }
+
+#ifdef HUAWEI_SOUND_PARAM_PATH
+
+#define MAX_PATH             (256)
+
+#define HUAWEI_DEFAULT_PRODUCT "default"
+
+#define HUAWEI_PRODUCT_IDENTIFIER_PATH \
+                "/sys/bus/platform/drivers/hw_audio_info/hw_audio_info/product_identifier"
+
+typedef void (*acdb_set_param_path_t)(char *path);
+
+static void initialize_huawei_sound_param_path(void *acdb_handle)
+{
+        acdb_set_param_path_t set_param_path;
+
+        set_param_path = (acdb_set_param_path_t)dlsym(acdb_handle, "acdb_loader_set_param_path");
+        if (!set_param_path) {
+            ALOGE("%s: Could not find the symbol acdb_loader_set_param_path from %s",
+                  __func__, LIB_ACDB_LOADER);
+        } else {
+            char product[MAX_PATH] = {0};
+            char path[MAX_PATH] = {0};
+            FILE *f;
+
+            if ((f = fopen(HUAWEI_PRODUCT_IDENTIFIER_PATH, "r")) == NULL) {
+                ALOGW("%s: Could not load product-identifier from %s errno %d", __func__,
+                        HUAWEI_PRODUCT_IDENTIFIER_PATH, errno);
+                strcpy(product, HUAWEI_DEFAULT_PRODUCT);
+            } else {
+                if (fread(product, 1, sizeof(product)-1, f) <= 0) {
+                    ALOGW("%s: Error reading the product-identifier from %s errno %d", __func__,
+                            HUAWEI_PRODUCT_IDENTIFIER_PATH, errno);
+                    strcpy(product, HUAWEI_DEFAULT_PRODUCT);
+                }
+                fclose(f);
+            }
+
+            snprintf(path, sizeof(path), "/vendor/etc/sound_param/%s/", product);
+            ALOGI("%s: Using param_path %s", __func__, path);
+
+            set_param_path(path);
+        }
+}
+
+#endif
 
 void *platform_init(struct audio_device *adev)
 {
